@@ -1,0 +1,126 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{listings} % Required for inserting code snippets
+\usepackage{xcolor}   % Required for code coloring
+\usepackage{float}    % To force figure placement
+\usepackage[margin=2.5cm]{geometry} % Adjust margins
+
+% --- Code Snippet Configuration ---
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=4,
+    language=Python
+}
+\lstset{style=mystyle}
+% ----------------------------------
+
+\title{Practical Work 1: TCP File Transfer Report}
+\author{Nghiem Xuan Son- 23BI14388}
+\date{November 2025}
+
+\begin{document}
+
+\maketitle
+
+\section{Protocol Design}
+To ensure the server correctly identifies the file name before receiving the raw binary content, we designed a simple application-level protocol using a delimiter.
+
+The communication flow is as follows:
+\begin{enumerate}
+    \item The client establishes a TCP connection to the server.
+    \item The client sends a header containing the filename followed by a newline character (\texttt{\textbackslash n}). This character acts as a delimiter.
+    \item Immediately after the delimiter, the client streams the raw binary content of the file until EOF (End of File).
+\end{enumerate}
+
+**Data structure sent by Client:**
+\begin{center}
+    \texttt{[Filename bytes] + [0x0A (\textbackslash n)] + [File Content Binary Data...]}
+\end{center}
+
+The server reads the incoming stream, buffers data until it finds the first \texttt{\textbackslash n}. The data preceding it is extracted as the filename, and all subsequent data is treated as file content and written to disk.
+
+\section{System Organization}
+The system follows a standard Client-Server architecture using blocking TCP sockets.
+
+\begin{itemize}
+    \item **Server:** The server runs passively. It binds to a specific port (e.g., 12345) and listens for incoming requests. Upon accepting a client connection, it enters a receiving loop to process the protocol header and then writes the received data chunks to a new file on the disk. It closes the connection upon receiving EOF.
+    \item **Client:** The client runs actively. It requires the IP address and port of the server. It reads a local file, connects to the server, sends the protocol header, and then streams the file content in defined chunk sizes (e.g., 4096 bytes) before closing the connection.
+\end{itemize}
+
+\section{Implementation}
+The implementation uses Python's built-in \texttt{socket} library. Files are opened in binary mode (\texttt{'rb'} for read binary, \texttt{'wb'} for write binary) to handle all file types correctly.
+
+\subsection{Client-Side Implementation (Sending)}
+The following snippet shows how the client prepares the header and sends the file content in chunks.
+
+\begin{lstlisting}[caption=Client sending mechanism]
+# Prepare header (filename + newline)
+filename = os.path.basename(filepath)
+header = filename.encode('utf-8') + b'\n'
+client_socket.sendall(header)
+
+# Open file in binary mode and stream content
+with open(filepath, 'rb') as f:
+    while True:
+        # Read chunk from disk
+        data = f.read(BUFFER_SIZE)
+        if not data:
+            break # EOF reached
+        # Send chunk over socket
+        client_socket.sendall(data)
+\end{lstlisting}
+
+\subsection{Server-Side Implementation (Receiving)}
+The following snippet demonstrates how the server separates the header from the body using the newline delimiter.
+
+\begin{lstlisting}[caption=Server header parsing mechanism]
+received_data = b''
+# Loop to find the delimiter
+while True:
+    chunk = client_socket.recv(BUFFER_SIZE)
+    received_data += chunk
+    # Check for delimiter
+    if b'\n' in received_data:
+        # Split data: before \n is filename, after is content start
+        header, file_content_start = received_data.split(b'\n', 1)
+        filename = header.decode('utf-8').strip()
+        break
+\end{lstlisting}
+
+\section{Who does what}
+Define the roles and responsibilities of the group members below.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Name} & \textbf{Responsibilities} \\ \hline
+Son Nghiem & Protocol design, Server implementation, Report writing \\ \hline
+Son Nghiem & Client implementation, Testing and debugging \\ \hline
+Son Nghiem & System architecture design, Documentation review \\ \hline
+\end{tabular}
+
+\label{tab:roles}
+\end{table}
+
+\end{document}
