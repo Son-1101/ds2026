@@ -1,0 +1,113 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+
+% Cấu hình hiển thị code
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=4,
+    language=Python
+}
+\lstset{style=mystyle}
+
+\title{Practical Work 2: RPC File Transfer (Manual Implementation)}
+\author{Nghiem Xuan Son - 23BI14388}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{RPC Protocol Design}
+In this practical work, instead of using a high-level library like XML-RPC, we implemented a **Manual RPC** mechanism using a custom binary protocol. This allows for lower overhead and gives us a deeper understanding of how RPC stubs work underneath.
+
+We defined a strict binary header structure (Stub) that precedes every payload.
+
+\subsection{Packet Structure}
+Every message sent to the server follows this binary format (8 bytes header):
+\begin{center}
+    \texttt{[RPC\_ID (4 bytes int)] + [PAYLOAD\_SIZE (4 bytes int)] + [PAYLOAD DATA...]}
+\end{center}
+
+We defined 3 RPC Operations:
+\begin{itemize}
+    \item \textbf{ID 1 (rpc\_sendFilename):} Payload contains the filename string.
+    \item \textbf{ID 2 (rpc\_sendChunk):} Payload contains a chunk of binary file data.
+    \item \textbf{ID 3 (rpc\_endFile):} Empty payload. Signals the server to close the file.
+\end{itemize}
+
+\section{System Organization}
+The system is organized into three components:
+\begin{enumerate}
+    \item \textbf{Stub (\texttt{rpc\_stub.py}):} Acts as the middleware. It provides helper functions that abstract the packet packing logic. The client calls these functions instead of sending raw bytes directly.
+    \item \textbf{Client (\texttt{client.py}):} Imports the stub. It reads the file and invokes stub functions in sequence (Filename $\rightarrow$ Chunks $\rightarrow$ End).
+    \item \textbf{Server (\texttt{server.py}):} Acts as the skeleton. It sits in a loop receiving 8-byte headers, unpacks them to find the `RPC_ID`, and dispatches the logic to the appropriate handler.
+\end{enumerate}
+
+\section{Implementation Code}
+
+\subsection{The Stub (RPC Marshalling)}
+We use Python's \texttt{struct} module to pack integers into binary bytes, mimicking C structs.
+
+\begin{lstlisting}[caption=rpc\_stub.py logic]
+HEADER_FORMAT = 'ii' # Two integers (ID, Size)
+
+def rpc_send_filename(sock, filename):
+    data = filename.encode('utf-8')
+    # Pack ID=1 and Size
+    header = struct.pack(HEADER_FORMAT, 1, len(data))
+    sock.sendall(header + data)
+
+def rpc_send_chunk(sock, chunk):
+    # Pack ID=2 and Size
+    header = struct.pack(HEADER_FORMAT, 2, len(chunk))
+    sock.sendall(header + chunk)
+\end{lstlisting}
+
+\subsection{The Server (RPC Dispatcher)}
+The server unpacks the header and switches based on ID.
+
+\begin{lstlisting}[caption=Server dispatch logic]
+# Receive exactly 8 bytes for header
+header = recv_exact(sock, 8)
+rpc_id, size = struct.unpack('ii', header)
+
+if rpc_id == 1:
+    # Handle Filename
+    filename = recv_exact(sock, size)
+    create_file(filename)
+elif rpc_id == 2:
+    # Handle File Content
+    data = recv_exact(sock, size)
+    write_to_file(data)
+elif rpc_id == 3:
+    close_file()
+\end{lstlisting}
+
+\section{Conclusion}
+By implementing the RPC stub manually, we successfully abstracted the networking complexity from the client logic. The client code is clean and looks like local function calls, fulfilling the core concept of RPC.
+
+\end{document}
