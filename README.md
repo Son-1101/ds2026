@@ -11,4 +11,4 @@ Student Info
 
 * Student Name: Nghiem Xuan Son
 * Student ID: 23BI14388
-* Student Group ID: Not-for-now
+* Student Group ID: 2
