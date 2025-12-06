@@ -1,0 +1,104 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+
+% Cấu hình hiển thị code
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{gray},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    language=Python
+}
+\lstset{style=mystyle}
+
+\title{Practical Work 3: MPI File Transfer}
+\author{Nghiêm Xuân Sơn - 23BI14388}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Choice of MPI Implementation}
+For this practical work, we selected **MPI (Message Passing Interface)** as the communication protocol. Specifically, we used the **\texttt{mpi4py}** library in Python.
+
+\textbf{Reasons for choice:}
+\begin{itemize}
+    \item \textbf{Standardization:} MPI is the de-facto standard for high-performance computing (HPC) and distributed systems.
+    \item \textbf{Python Integration:} \texttt{mpi4py} provides Pythonic bindings for the MPI standard, allowing us to send complex Python objects (like strings) or raw buffers (like file chunks) easily.
+    \item \textbf{SPMD Model:} It allows us to manage separate processes (Sender and Receiver) within a single codebase based on their Rank ID.
+\end{itemize}
+
+\section{System Design \& Organization}
+The system follows the \textbf{SPMD (Single Program, Multiple Data)} architecture. A single script is executed, but behavior diverges based on the process \textbf{Rank}.
+
+\begin{itemize}
+    \item \textbf{Rank 0 (Sender):} Reads the file from disk and sends it to Rank 1.
+    \item \textbf{Rank 1 (Receiver):} Listens for messages from Rank 0 and writes data to disk.
+\end{itemize}
+
+We use \textbf{MPI Tags} to distinguish message types in the stream:
+\begin{itemize}
+    \item \texttt{Tag 1}: Filename metadata.
+    \item \texttt{Tag 2}: File binary content (Chunks).
+    \item \texttt{Tag 3}: End of transmission signal (EOF).
+\end{itemize}
+
+\section{Implementation Code Snippets}
+
+\subsection{Rank 0: Sender Logic}
+The sender reads the file and uses \texttt{comm.send} with specific tags.
+
+\begin{lstlisting}[caption=Sender implementation]
+if rank == 0:
+    # 1. Send Filename
+    comm.send(filename, dest=1, tag=1)
+
+    # 2. Send Data Chunks
+    with open(filename, 'rb') as f:
+        while True:
+            chunk = f.read(4096)
+            if not chunk: break
+            comm.send(chunk, dest=1, tag=2)
+            
+    # 3. Send EOF
+    comm.send(None, dest=1, tag=3)
+\end{lstlisting}
+
+\subsection{Rank 1: Receiver Logic}
+The receiver waits for any message (\texttt{MPI.ANY\_TAG}) and switches behavior based on the received tag.
+
+\begin{lstlisting}[caption=Receiver implementation]
+elif rank == 1:
+    while True:
+        status = MPI.Status()
+        # Receive data and get status
+        data = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
+        tag = status.Get_tag()
+        
+        if tag == 1:       # Filename Tag
+            filename = data
+            f = open("received_" + filename, "wb")
+        elif tag == 2:     # Data Tag
+            f.write(data)
+        elif tag == 3:     # End Tag
+            f.close()
+            break
+\end{lstlisting}
+
+
+
+\end{document}
