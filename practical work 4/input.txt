@@ -1,0 +1,4 @@
+Hello world
+Hello map reduce
+Map reduce is cool
+World count example
